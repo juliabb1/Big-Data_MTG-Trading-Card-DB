@@ -1,0 +1,63 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 30px;
+  width: 750px;
+  margin: auto;
+}
+
+.input {
+  padding: 5px 15px;
+  width: 300px;
+}
+
+.cards-list {
+  margin-top: 30px;
+  width: 600px;
+}
+
+.cards {
+  display: grid;
+  grid-template-areas:
+  "a b c";
+  grid-auto-columns: minmax(0, 1fr);
+  list-style: none;
+  margin: 10px 0;
+  padding: 10px;
+  background: #eee;
+  justify-content: space-between;
+  align-items: start;
+}
+
+.cards-multiverseid {
+  grid-area: c;
+  text-align: center;
+  color: brown;
+  font-family: "Impact";
+  margin-right: 2px;
+}
+
+.cards-name {
+  grid-area: b;
+  color: black;
+  font-family: "Impact";
+  text-align: center;
+  margin-right: 2px;
+}
+
+.cards-imageurl {
+  grid-area: a;
+  display: flex;
+  justify-content: center;
+}
+
+.cards-img {
+  height: auto;
+  width: 70%;
+}
+
+.no-results{
+  text-align: center;
+
+}
