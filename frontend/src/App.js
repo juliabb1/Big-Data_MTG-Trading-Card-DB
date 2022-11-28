@@ -3,6 +3,11 @@ import axios from 'axios';
 
 import './App.css';
 
+/**App
+ * contains the search system logic and the elements that should be displayed in the frontend.
+ * The search system can be used to search for a card via its name or via it's multiverseid
+ * @returns homepage of frontend
+ */
 function App() {
   // entries in mtg_cards table
   const [mtg_cards, setMtg_cards] = useState([]);
@@ -38,7 +43,7 @@ function App() {
     else if (search_val !== '' && !isNaN(search_val)) {
       var search_id = parseInt(search_val)
       const results = mtg_cards.filter((mtg_card) => {
-        return parseInt(mtg_card.multiverseid) === search_id;
+        return mtg_card.multiverseid.startsWith(search_id.toString());
       });
       setFoundCards(results);
     } 
@@ -49,6 +54,7 @@ function App() {
     setName(search_val);
   };
 
+  // what should be displayed
   return (
     <div className="container">
       <input type="search" 
