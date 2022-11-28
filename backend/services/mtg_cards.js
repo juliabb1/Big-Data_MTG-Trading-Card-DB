@@ -1,21 +1,18 @@
 const db = require('./db');
 const helper = require('../helper');
-const config = require('../config');
 
-async function getMultiple(page = 1){
-  const offset = helper.getOffset(page, config.listPerPage);
+async function getData(){
   const rows = await db.query(
-    `SELECT * 
-    FROM mtg_cards LIMIT ${offset},${config.listPerPage}`
+    `SELECT DISTINCT * 
+    FROM mtg_cards
+    WHERE imageUrl != ""`
   );
-  const data = helper.emptyOrRows(rows);
-  const meta = {page};
-
+  data = helper.emptyOrRows(rows)
   return {
     data
   }
 }
 
 module.exports = {
-    getMultiple
+  getData
   }

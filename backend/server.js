@@ -9,8 +9,9 @@ app.use(
     extended: true,
   })
 );
-app.use(cors()) // Use this after the variable declaration
+app.use(cors())
 
+// Backend routes
 
 app.get("/", (req, res) => {
   res.json({ message: "ok" });

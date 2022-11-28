@@ -1,3 +1,6 @@
+/** config
+ * contains all relevant information about the database.
+ */
 const config = {
     db: {
       host: "172.17.0.2",
@@ -5,6 +8,5 @@ const config = {
       password: "password",
       database: "mtg",
     },
-    listPerPage: 10,
   };
   module.exports = config;

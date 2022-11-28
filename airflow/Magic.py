@@ -18,7 +18,6 @@ import pandas as pd
 from paramiko import SSHClient
 from sshtunnel import SSHTunnelForwarder
 
-import mysql.connector
 
 from airflow import DAG
 from airflow.operators.dummy_operator import DummyOperator
