@@ -4,8 +4,7 @@ const helper = require('../helper');
 async function getData(){
   const rows = await db.query(
     `SELECT DISTINCT * 
-    FROM mtg_cards
-    WHERE imageUrl != ""`
+    FROM mtg_cards`
   );
   data = helper.emptyOrRows(rows)
   return {

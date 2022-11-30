@@ -32,6 +32,7 @@ function App() {
   const [foundCards, setFoundCards] = useState(mtg_cards);
   const filter = (e) => {
     const search_val = e.target.value;
+
     // Check fo Name input
     if (search_val !== '' && isNaN(search_val)) {
       const results = mtg_cards.filter((mtg_card) => {
@@ -47,12 +48,13 @@ function App() {
       });
       setFoundCards(results);
     } 
-    // If the text field is empty, show all cards
+    // If the text field is empty, show no
     else {
-      setFoundCards(mtg_cards);
+      setFoundCards([]);
     }
     setName(search_val);
   };
+  var setBlankScreen = true;
 
   // what should be displayed
   return (
@@ -75,9 +77,15 @@ function App() {
               <span className="cards-multiverseid">{mtg_card.multiverseid}</span>
             </li>
           ))
-        ) : (
-          <h1 className='no-results'>No results found!</h1>
-        )}
+        ) : ( () => {
+          if (setBlankScreen === true) {
+            setBlankScreen = false;
+            return <h1 className='no-results'>Search for a MTG Card!</h1>
+          }
+          else
+            return <h1 className='no-results'>No results found!</h1>
+        })()
+      }
       </div>
     </div>
   );

@@ -18,6 +18,7 @@ import pandas as pd
 from paramiko import SSHClient
 from sshtunnel import SSHTunnelForwarder
 
+import mysql.connector
 
 from airflow import DAG
 from airflow.operators.dummy_operator import DummyOperator
@@ -67,7 +68,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS mtg_cards(
 	names ARRAY<STRING>
     ) PARTITIONED BY (partition_year int, partition_month int, partition_day int) 
     ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe' 
-    LOCATION 'hdfs:///user/hadoop/mtg/raw/mtg_cards';
+    LOCATION 'hdfs:///user/hadoop/mtg/raw/mtg_cards/';
 '''
 
 """hiveSQL_create_foreign_cards_table
@@ -85,7 +86,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS mtg_foreign_cards(
     cardid STRING
 ) PARTITIONED BY (partition_year int, partition_month int, partition_day int) 
 ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe' 
-LOCATION 'hdfs:///user/hadoop/mtg/raw/mtg_foreign_cards'; 
+LOCATION 'hdfs:///user/hadoop/mtg/raw/mtg_foreign_cards/'; 
 '''
 
 """hiveSQL_add_partition_mtg_cards
@@ -166,7 +167,7 @@ FROM
     mtg_cards c
     JOIN mtg_foreign_cards f ON (c.id = f.cardid)
 WHERE
-    f.language = "German";
+    f.language = "German" and f.imageUrl != "";
 '''
 
 # DOWNLOAD MTG CARDS ################################
@@ -175,10 +176,9 @@ Iterates through all available mtg cards the magicgathering-api provides.
 The English Cards will be written in a "mtg_cards_*.json" file and the Foreign Cards will be written in a
 a "mtg_foreign_cards_*.json" file in the folder "/home/airflow/mtg"
 """
-def get_all_mtg_cards():
+def get_all_mtg_cards(ds, **kwargs):
     # get first card
     res = requests.get("https://api.magicthegathering.io/v1/cards?pageSize=150&page=1")
-    total_count_pages = int(res.headers["Total-Count"])
 
     print("1 von " + str(709))
     cards = res.json()["cards"]
@@ -186,7 +186,7 @@ def get_all_mtg_cards():
     
     for i in range(2, 710): # pages are filled until page 709
         print(str(i) + " von " + str(709))
-        res = requests.get("https://api.magicthegathering.io/v1/cards?pageSize=1&page=" + str(i))
+        res = requests.get("https://api.magicthegathering.io/v1/cards?pageSize=150&page=" + str(i))
         res_cards = res.json()["cards"]
         foreign_cards = foreign_cards + getForeignCards(res_cards)
         cards = cards + res.json()["cards"]
@@ -198,18 +198,17 @@ def get_all_mtg_cards():
     
     # Writes the gathered card information into a json file
     cardsJson = toJSON(cards)
-    text_file = open("/home/airflow/mtg/mtg_cards_" + getDate("all") + ".json", "w")
+    text_file = open("/home/airflow/mtg/mtg_cards_" + ds + ".json", "w")
     text_file.write(cardsJson)
 
     foreignCardsJson = toJSON(foreign_cards)
-    text_file = open("/home/airflow/mtg/mtg_foreign_cards_" + getDate("all") + ".json", "w")
+    text_file = open("/home/airflow/mtg/mtg_foreign_cards_" + ds + ".json", "w")
     text_file.write(foreignCardsJson)
     return
 
 """getForeignCards
 Iterates through every key in the cards-json-object, searching for the "foreignNames" key.
 All available foreign cards data are being appended to a foreignCards list.
-
 params:
     cards (JSON): Contains all information about a card
 """
@@ -224,7 +223,6 @@ def getForeignCards(cards):
 
 """toJSON
 Converts a list into a JSON Object.
-
 params:
     cards (List): Contains all information about a card
 """
@@ -233,25 +231,6 @@ def toJSON(cards):
         cards[i] = json.dumps(cards[i])
     cardsJson = ",\n".join(cards)
     return cardsJson
-
-"""getDate
-Get an element of the current date.
-
-params:
-    entity (string): contains information which element of the current date should be returned
-    
-returns:
-    date: element of the current date
-"""
-def getDate(entity):
-    if entity=="y":
-        return datetime.today().strftime('%Y')
-    if entity=="m":
-        return datetime.today().strftime('%m')
-    if entity=="d":
-        return datetime.today().strftime('%d')
-    if entity=="all":
-        return datetime.today().strftime('%Y-%m-%d')
 
 # MYSQL ################################
 """execute_mysql_ssh_query
@@ -269,7 +248,7 @@ def execute_mysql_ssh_query(query, database_name, data=None):
     sql_password = 'password'
     sql_main_database = database_name
     sql_port = 3306
-    ssh_host = '34.89.121.166'
+    ssh_host = '35.246.35.151'
     ssh_user = 'baijulia02'
     ssh_port = 22
  
@@ -323,14 +302,13 @@ def mySQL_drop_mtg_cards_table():
 """fetch_hive_table_data
 Creates a ssh tunnel to connect to the hive database.
 Fetches the data of the hive_table "cards_reduced" in database "default" and returns the selected data.
-
 returns:
     data (list, tuple, optional): Contains selected data from the hive table
 """
 def fetch_hive_table_data(query):
     mypkey = paramiko.RSAKey.from_private_key_file('/home/airflow/airflow/dags/big-data')
     # if you want to use ssh password use - ssh_password='your ssh password', bellow
-    ssh_host = '34.89.121.166'
+    ssh_host = '35.246.35.151'
     ssh_user = 'baijulia02'
     ssh_port = 22
  
@@ -362,7 +340,7 @@ def load_data_into_mySQL_mtg_cards_table():
     hive_fetch_query = "SELECT * FROM default.cards_reduced"
     hive_data = fetch_hive_table_data(hive_fetch_query)
     
-    mysql_insert_query = '''INSERT INTO mtg_cards(name, multiverseid, imageurl) VALUES (%s, %s, %s)'''
+    mysql_insert_query = '''INSERT INTO mtg_cards(name, multiverseid, imageUrl) VALUES (%s, %s, %s)'''
     execute_mysql_ssh_query(query=mysql_insert_query, database_name="mtg", data=hive_data)
     
 
@@ -402,7 +380,8 @@ Task to download all mtg_cards and mtg_foreign_cards.
 download_mtg_cards = PythonOperator(
     task_id='download_mtg_cards',
     python_callable = get_all_mtg_cards,
-    op_kwargs = {},
+    provide_context=True,
+    xcom_push=True,
     dag=dag
 )
 
@@ -411,7 +390,7 @@ Task to create a directory in the hdfs for the mtg_cards.
 """
 create_mtg_cards_partition_dir = HdfsMkdirFileOperator(
     task_id='mkdir_hdfs_cards_dir',
-    directory='/user/hadoop/mtg/raw/mtg_cards/' + getDate("y") + "/" + getDate("m") + "/" + getDate("d"),
+    directory='/user/hadoop/mtg/raw/mtg_cards/{{ macros.ds_format(ds, "%Y-%m-%d", "%Y")}}/{{ macros.ds_format(ds, "%Y-%m-%d", "%m")}}/{{ macros.ds_format(ds, "%Y-%m-%d", "%d")}}',
     hdfs_conn_id='hdfs',
     dag=dag,
 )
@@ -421,7 +400,7 @@ Task to create a directory in the hdfs for the mtg_foreign_cards.
 """
 create_mtg_foreign_cards_partition_dir = HdfsMkdirFileOperator(
     task_id='mkdir_hdfs_foreign_cards_dir',
-    directory='/user/hadoop/mtg/raw/mtg_foreign_cards/' + getDate("y") + "/" + getDate("m") + "/" + getDate("d"),
+    directory='/user/hadoop/mtg/raw/mtg_foreign_cards/{{ macros.ds_format(ds, "%Y-%m-%d", "%Y")}}/{{ macros.ds_format(ds, "%Y-%m-%d", "%m")}}/{{ macros.ds_format(ds, "%Y-%m-%d", "%d")}}',
     hdfs_conn_id='hdfs',
     dag=dag,
 )
@@ -432,8 +411,8 @@ into the hadoop file system.
 """
 hdfs_put_mtg_cards = HdfsPutFileOperator(
     task_id='upload_mtg_cards_to_hdfs',
-    local_file='/home/airflow/mtg/mtg_cards_' + getDate('all') +'.json',
-    remote_file='/user/hadoop/mtg/raw/mtg_cards/'+getDate("y") + "/" + getDate("m") + "/" + getDate("d")+ '/' + 'mtg_cards_' + getDate("all")+ '.json',
+    local_file='/home/airflow/mtg/mtg_cards_{{ ds }}.json',
+    remote_file='/user/hadoop/mtg/raw/mtg_cards/{{ macros.ds_format(ds, "%Y-%m-%d", "%Y")}}/{{ macros.ds_format(ds, "%Y-%m-%d", "%m")}}/{{ macros.ds_format(ds, "%Y-%m-%d", "%d")}}/'+ 'mtg_cards_{{ ds }}.json',
     hdfs_conn_id='hdfs',
     dag=dag,
 )
@@ -444,8 +423,8 @@ into the hadoop file system.
 """
 hdfs_put_foreign_cards = HdfsPutFileOperator(
     task_id='upload_foreign_cards_to_hdfs',
-    local_file='/home/airflow/mtg/mtg_foreign_cards_' + getDate('all') +'.json',
-    remote_file='/user/hadoop/mtg/raw/mtg_foreign_cards/' + getDate("y") + "/" + getDate("m") + "/" + getDate("d") + '/' + 'mtg_foreign_cards_' + getDate("all")+ '.json',
+    local_file='/home/airflow/mtg/mtg_foreign_cards_{{ ds }}.json',
+    remote_file='/user/hadoop/mtg/raw/mtg_foreign_cards/{{ macros.ds_format(ds, "%Y-%m-%d", "%Y")}}/{{ macros.ds_format(ds, "%Y-%m-%d", "%m")}}/{{ macros.ds_format(ds, "%Y-%m-%d", "%d")}}/' + 'mtg_foreign_cards_{{ ds }}.json',
     hdfs_conn_id='hdfs',
     dag=dag,
 )
@@ -594,7 +573,6 @@ load_data_hive_to_mysql_mtg_cards = PythonOperator(
 """
 Airflow. Workflow.
 """
-create_local_import_dir >> clear_local_import_dir >> download_mtg_cards
-download_mtg_cards >> add_JAR_dependencies >> create_mtg_cards_partition_dir >> hdfs_put_mtg_cards >> delete_HiveTable_mtg_cards >> create_HiveTable_mtg_cards >> addPartition_HiveTable_mtg_cards >> dummy_op
+create_local_import_dir >> clear_local_import_dir >> download_mtg_cards >> add_JAR_dependencies >> create_mtg_cards_partition_dir >> hdfs_put_mtg_cards >> delete_HiveTable_mtg_cards >> create_HiveTable_mtg_cards >> addPartition_HiveTable_mtg_cards >> dummy_op
 download_mtg_cards >> add_JAR_dependencies >> create_mtg_foreign_cards_partition_dir >> hdfs_put_foreign_cards >> delete_HiveTable_foreign_cards >> create_HiveTable_foreign_cards >> addPartition_HiveTable_mtg_foreign_cards >> dummy_op
 dummy_op >> delete_HiveTable_reduced_cards >> create_HiveTable_cards_reduced >> hive_insert_overwrite_cards_reduced >> mySQL_create_mtg_database  >> delete_MySQLTable_mtg_cards >> mySQL_create_mtg_cards_table >> load_data_hive_to_mysql_mtg_cards
